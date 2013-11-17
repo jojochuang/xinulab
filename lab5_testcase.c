@@ -152,7 +152,7 @@ test0:
         asm("movl %eax, cr0val");
         asm("popl %eax");
 
-        if( cr0val & ( 1<<31 ) == 1 ){
+        if( (cr0val & ( 1<<31 ) ) == (1<<31) ){
           kprintf("GRADING : Test 0-1 Failed: paging not enabled\r\n");
         }else{
           kprintf("GRADING : Test 0-1 Successful\r\n");
