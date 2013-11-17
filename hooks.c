@@ -72,8 +72,8 @@ void hook_pfault(char *addr){
       break;
     case 13:
       break;
-    default:
-      kprintf("page fault at an unknown test!\r\n");
+    /*default:
+      kprintf("page fault at an unknown test!\r\n");*/
       break;
   }
 

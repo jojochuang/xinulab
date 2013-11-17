@@ -141,7 +141,7 @@ int main(int argc, char **argv){
 
         psinit();
 
-        goto test6;
+        goto test0;
 test0:
         /**
          * Make sure paging is enabled
@@ -153,9 +153,9 @@ test0:
         asm("popl %eax");
 
         if( (cr0val & ( 1<<31 ) ) == (1<<31) ){
-          kprintf("GRADING : Test 0-1 Failed: paging not enabled\r\n");
-        }else{
           kprintf("GRADING : Test 0-1 Successful\r\n");
+        }else{
+          kprintf("GRADING : Test 0-1 Failed: paging not enabled. cr0=0x%X\r\n", cr0val);
         }
 
         /**
@@ -667,6 +667,7 @@ test12:
          * and access each page
          */
         TEST=12;
+        kprintf("GRADING: Clean up. Releasing backing store. It's ok if you see errors here\r\n");
         for(i=0; i< 8; i++){
                 close_bs(i);
                 deallocate_bs(i);
