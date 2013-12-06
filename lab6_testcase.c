@@ -1,18 +1,18 @@
 #include <xinu.h>
 
         int flag = 0;
+        int TEST;
 
 /** 
  * set NFRAMES smaller to test page replacement policy 
- *
+ * Please update The NFRAMES macro include/paging.h to test page replacement!!
  * */
-#ifdef NFRAMES
-        #undef NFRAMES
-        #define NFRAMES 25
-#endif
 
 #define OP_READ 0
 #define OP_WRITE 1
+
+int fifo_swap = 0;
+int ourpolicy_swap = 0;
 
 bsd_t store_id[8] = {0};
 void out_of_seq_calls(pid32 parent, bsd_t store){
@@ -111,46 +111,29 @@ void vgetmem_test( pid32 parent  ){
 
 
     send(parent, p );
-    /*if( p >= 4096*4096 ){
-        send( parent, OK );
-    }else{
-        send( parent, SYSERR );
-    }*/
 }
-/* test5 */
-void privatemap(pid32 parent, int operation){
+/* test 5-1 */
+void sharedmap(pid32 parent, int offset, int expected_value){
         int pageno = 5000;
-        store_id[1] = allocate_bs(200);
-        send( parent, store_id[1] );
-        if(store_id[1] == SYSERR){
-                kprintf("GRADING : Test 5-allocate Failed\r\n");
-                send(parent, SYSERR);
-                return;
-        }
+        int flag=0;
+
         if(open_bs(store_id[1]) == SYSERR){
-                kprintf("GRADING : Test 5-open Failed\r\n");
+                kprintf("GRADING : Test 5-1-open Failed\r\n");
                 send(parent, SYSERR);
                 return;
         }
-        if(xmmap(pageno, 100, MAP_PRIVATE, store_id[1])== SYSERR){
-                kprintf("GRADING : Test 5-xmmap Failed\r\n");
+        if(xmmap(pageno, 100, MAP_SHARED, store_id[1])== SYSERR){
+                kprintf("GRADING : Test 5-2-xmmap Failed\r\n");
                 close_bs(store_id[1]);
-                deallocate_bs(store_id[1]);
                 send(parent, SYSERR);
                 return;
         }
 
-
-        int* ptr = (int *)(pageno*4096);
-        if( operation == OP_READ ){
-            // perform read operation
-            int v = *ptr;
-
-        }else{ // OP_WRITE
-            // perform write operation
-            *ptr = 520;
-
-
+        int v = *( int *) ( pageno *NBPG + offset  );
+        if( v != expected_value ){
+                kprintf("GRADING : Test 5-shared map Failed. Did not get the expected value. Expect %d, got %d\r\n", expected_value, v);
+                flag++;
+                send(parent, SYSERR);
         }
 
         xmunmap(pageno);
@@ -168,8 +151,53 @@ void privatemap(pid32 parent, int operation){
                 send(parent, SYSERR);
                 return;
         }*/
-        deallocate_bs(store_id[1]);
-        store_id[1] = -1;
+        if( flag == 0 ){
+          kprintf("GRADING : Test 5 Successful\r\n");
+          send(parent, OK);
+        }
+
+}
+/* test5 */
+void privatemap(pid32 parent, int old_value, int offset){
+        int pageno = 5000;
+        if(open_bs(store_id[1]) == SYSERR){
+                kprintf("GRADING : Test 5-open Failed\r\n");
+                send(parent, SYSERR);
+                return;
+        }
+        if(xmmap(pageno, 100, MAP_PRIVATE, store_id[1])== SYSERR){
+                kprintf("GRADING : Test 5-xmmap Failed\r\n");
+                close_bs(store_id[1]);
+                send(parent, SYSERR);
+                return;
+        }
+
+
+        int* ptr = (int *)(pageno*NBPG + offset);
+        int v = *ptr;
+        if( v != old_value ){
+            kprintf("GRADING : Test 5 read Failed. Read unexpected value. Expected %d, Got %d\r\n", old_value, v);
+
+        }
+        // read. This read should not be visible to the other process
+        *ptr = 520;
+
+        xmunmap(pageno);
+        /*if(xmunmap(pageno) == SYSERR){
+                kprintf("GRADING : Test 5-xmunmap failed\r\n");
+                close_bs(store_id[1]);
+                deallocate_bs(store_id[1]);
+                send(parent, SYSERR);
+                return;
+        }*/
+        close_bs(store_id[1]);
+        /*if(close_bs(store_id[1]) == SYSERR){
+                kprintf("GRADING : Test 5-close Failed\r\n");
+                deallocate_bs(store_id[1]);
+                send(parent, SYSERR);
+                return;
+        }*/
+        //deallocate_bs(store_id[1]);
         kprintf("GRADING : Test 5 Successful\r\n");
         send(parent, OK);
 
@@ -420,8 +448,9 @@ int main(int argc, char **argv){
 
         psinit();
         kprintf("GRADING: Start\r\n");
-        goto bonus;
-        //goto test6;
+        //goto bonus;
+        /* Test case 01~03 are sanity check. */
+        TEST=0;
 test01:
         for(i=0; i< 8; i++){
                 allocate_bs(10);
@@ -473,9 +502,9 @@ test03:
         open_bs(store_id[0]);
         close_bs(store_id[0]);
         deallocate_bs(store_id[0]);
-        //goto test7;
 //----------------------------------------------------------------------------------
 // start of lab4 test cases
+        TEST=1;
 test1:
         /* Lab4
          * Test case 1
@@ -493,6 +522,7 @@ test1:
                 kprintf("GRADING : Test 1 Failed\r\n");
         }
 
+        TEST=2;
 test2:
         /*
          * Test case 2 : 
@@ -503,7 +533,6 @@ test2:
         flag = 0;
         recvclr();
         pid = vcreate(test2proc, 2048,30, 30, "test2", 1, currpid);
-        //pid = create(test2proc, INITSTK,INITPRIO, "Xmmap write", 1, currpid);
         resume(pid);
 
         if(receive() == OK){
@@ -515,6 +544,7 @@ test2:
         flag = 0;
         goto test4;
 test4:
+        TEST=4;
         /* Lab4
          * Test case 4
          * test vgetmem() - required
@@ -529,12 +559,38 @@ test4:
         }else{
                 kprintf("GRADING : Test 4 Failed\r\n");
         }
+test51:
+        TEST=51;
+        /* 
+         * Test case 5-1
+         * test MAP_SHARED
+         *
+         * */
+        flag = 0;
+        store_id[1] = allocate_bs(100);
+        open_bs(store_id[1]);
+        int start = 6000;
+        xmmap(start, 100, MAP_SHARED, store_id[1]);
+        int offset = 100;
+        ptr = (int*)( start* NBPG + offset );
+        *ptr = 1024;
+        resume( vcreate(sharedmap,2048, 30, 30, "test5 sharedmap process", 3, currpid, offset, *ptr) );
 
-        //goto test6;
+        int result = receive();
+        if( result == OK ){
+                kprintf("GRADING : Test 5-1 Successful.\r\n");
+        }
+
+        xmunmap(6000);
+        close_bs(store_id[1]);
+        deallocate_bs(store_id[1]);
+
+
 test5:
+        TEST=5;
         /* Lab4
          * Test case 5
-         * Make sure PRIVATE xmmap mode works for new processes. i.e., copy on write does work
+         * Make sure PRIVATE xmmap mode works for new processes.
          *
          * */
 
@@ -545,29 +601,45 @@ test5:
         flag = 0;
         store_id[1] = allocate_bs(100);
         open_bs(store_id[1]);
-        xmmap(6000, 100, MAP_SHARED, store_id[1]);
-        xmunmap(6000);
-        // see if access to the mapped address causes page fault.
-        resume( vcreate(privatemap,2048, 30, 30, "test5 privatemap process", 2, currpid, OP_READ) );
+        xmmap(6000, 100, MAP_PRIVATE, store_id[1]);
 
-        local_store = receive();
-        // measure the time until the sub proc finishes reading
-        if( recvtime( 5*1000*1000 ) == SYSERR ){ // 1000 ms
-                // read operation should take no time.
-                kprintf("GRADING : Test 5-performed read does not finish in time.\r\n");
+        int expected_value = 100;
+        offset = 50;
+
+        ptr = (int*)( 6000*NBPG + offset  );
+        *ptr = expected_value;
+
+        xmunmap(6000);
+        close_bs( store_id[1] );
+
+        // map again at different address
+        open_bs(store_id[1]);
+        xmmap(7000, 100, MAP_PRIVATE, store_id[1]);
+
+        // read it. should get the same value written before.
+        ptr = (int*)( 7000*NBPG + offset  );
+        int v5 = *ptr;
+
+        if( v5 != expected_value ){
+              kprintf("GRADING : Test 5-performed read didn't get the expected value.\r\n");
+              flag++;
+        }
+
+        // another process writes the same backing store
+        resume( vcreate(privatemap,2048, 30, 30, "test5 privatemap process", 3, currpid, expected_value, offset) );
+
+        if( receive() != OK ){
+          flag++;
+        }
+
+        v5 = *ptr;
+        if( v5 != expected_value ){
+                kprintf("GRADING : Failed Test 5-value was changed by another process! .\r\n");
                 flag++;
         }
 
-        resume( vcreate(privatemap,2048, 30, 30, "test5 privatemap process", 2, currpid, OP_WRITE) );
+        xmunmap( 7000 );
 
-        local_store = receive();
-        // measure the time until the sub proc finishes reading
-        if( recvtime( 5*1000*1000 ) == SYSERR ){
-                // read operation should take no time.
-                kprintf("GRADING : Test 5-performed write and spent > 1 seconds, which is expected.\r\n");
-        }else{
-            flag ++;
-        }
 
         close_bs(store_id[1]);
         deallocate_bs(store_id[1]);
@@ -576,9 +648,9 @@ test5:
                 kprintf("GRADING : Test 5 Successful.\r\n");
         }
 
-        //goto done;
 
 test6:
+        TEST=6;
         /* Lab4
          * Test case 6
          * Make sure every process has its own page directory mapping
@@ -640,6 +712,7 @@ test6:
         goto test7;
 
 test7:
+        TEST=7;
         /* Lab4
          * Test case 7 : 
          * Make sure xmmap/write/xunmap/xmmap/read works
@@ -722,6 +795,7 @@ test7:
         }
         goto test3;
 test3:
+        TEST=3;
         /*
          * Test case 3 : 
          * Make sure another process(vcreate) can not read the memory I have written
@@ -784,6 +858,7 @@ test3:
         }
         goto test10;
 test10:
+        TEST=10;
         recvclr();
         sleep(1); // sleep one second before test10 to reduce interference.
         /* Lab4
@@ -795,20 +870,32 @@ test10:
         resume(pid);
 
         receive();
+        if( fifo_swap == 0 ){
+          kprintf("GRADING : Test 10 Failed. number of page-outs is zero! Either you did not call hook_pswap_out() or number of frames not dependent on NFRAMES\r\n" );
+        }else{
+          kprintf("GRADING : Test 10 Successful. number of page-outs is %d\r\n", fifo_swap );
+        }
 test11:
+        TEST=11;
         recvclr();
         sleep(1); // sleep one second before test10 to reduce interference.
         /* Lab4
          * stress test vgetmem or vcreate?
          * */
 
-        srpolicy( MYPOLICY );
+        srpolicy( OURPOLICY );
         pid = vcreate(policytest, 2048, 10, 30, "stress test. policytest", 1, currpid);
         resume(pid);
 
         receive();
+        if( ourpolicy_swap == 0 ){
+          kprintf("GRADING : Test 11 Failed. number of page-outs is zero! Either you did not call hook_pswap_out() or number of frames not dependent on NFRAMES\r\n" );
+        }else{
+          kprintf("GRADING : Test 11 Successful. number of page-outs is %d\r\n", ourpolicy_swap );
+        }
         srpolicy( FIFO );
 test8:
+        TEST=8;
         /* Lab4
          * Test 8
          * Make sure invalid memory access kills() the process
@@ -825,6 +912,7 @@ test8:
                 kprintf("GRADING : Test 8 Successful\r\n");
         }
 test9:
+        TEST=9;
         /* Lab4
          * Test case 9
          * Make sure kill() cleans up mappings and deallocates
