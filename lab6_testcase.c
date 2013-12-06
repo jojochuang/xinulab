@@ -598,19 +598,17 @@ test5:
         // how to test? first, do read-only (map a large number of pages) copy and measure the time is ~ 0
         // and then do a write after copy to make sure it does not fail
 
+        int expected_value = 100;
         flag = 0;
         store_id[1] = allocate_bs(100);
         open_bs(store_id[1]);
-        xmmap(6000, 100, MAP_PRIVATE, store_id[1]);
-
-        int expected_value = 100;
-        offset = 50;
+        xmmap(6000, 100, MAP_SHARED, store_id[1]);
 
         ptr = (int*)( 6000*NBPG + offset  );
         *ptr = expected_value;
 
         xmunmap(6000);
-        close_bs( store_id[1] );
+        close_bs(store_id[1]);
 
         // map again at different address
         open_bs(store_id[1]);
